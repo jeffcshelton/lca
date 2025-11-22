@@ -114,7 +114,8 @@ def main():
     # Note: You'll need to provide your own test image
     # For this example, we'll create a random image
     print("Step 2: Loading test image...")
-    image = torch.rand(1, 3, 224, 224, device=device) * 255.0
+    # image = torch.rand(1, 3, 224, 224, device=device) * 255.0
+    image = load_test_image('tabbycat.jpg', size=224).to(device)
     true_label = torch.tensor([281], device=device)  # Example: 'tabby cat'
     print("✓ Image loaded\n")
 
@@ -130,11 +131,17 @@ def main():
         alpha=2.0,            # Step size
         num_steps=50,         # Number of iterations (reduced for demo)
         norm='linf',          # L-infinity norm
-        targeted=False,       # Untargeted attack
+        targeted=True,       # Untargeted attack
         jpeg_quality_min=50,  # EoT quality range
-        jpeg_quality_max=95,
-        num_jpeg_samples=3,   # EoT samples
-        device=device
+        jpeg_quality_max=50,
+        num_jpeg_samples=1,   # EoT samples
+        device=device,
+        loss_weights={
+            'pre_compression': 0,
+            'post_compression': 1.0,
+            'lpips': .5,
+            'tv_norm': 0
+        }
     )
     print("✓ Attack initialized\n")
 
@@ -145,7 +152,8 @@ def main():
     adv_image, info = attack.attack(
         images=image,
         labels=true_label,
-        return_history=True
+        return_history=True,
+        target_labels=torch.tensor([7], device=device)
     )
 
     print("✓ Attack completed!\n")
@@ -186,7 +194,7 @@ def main():
 
     # 6. Visualize
     print("\nStep 5: Creating visualization...")
-    compressed_q75 = real_jpeg.compress(adv_image, 75)
+    compressed_q75 = real_jpeg.compress(adv_image, 50)
     visualize_results(
         original=image,
         adversarial=adv_image,
@@ -194,10 +202,6 @@ def main():
     )
 
     print("\n✓ Done!")
-    print("\nKey takeaway:")
-    print("  - The adversarial image is correctly classified BEFORE compression")
-    print("  - The SAME image is misclassified AFTER JPEG compression")
-    print("  - This demonstrates a compression-activated adversarial attack!")
 
 
 if __name__ == '__main__':
