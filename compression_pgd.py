@@ -14,7 +14,7 @@ from compression.diff_jpeg import DifferentiableJPEG, ExpectationOverTransformat
 from loss_functions import CompressionActivatedLoss
 
 
-class CompressionPGD: # do FGSM too?
+class CompressionPGD:
     """
     PGD attack with differentiable JPEG compression.
 
@@ -151,7 +151,7 @@ class CompressionPGD: # do FGSM too?
                     raise ValueError(f"Unsupported norm: {self.norm}")
 
                 # Update delta
-                delta.data = delta.data + delta_update
+                delta.data = delta.data - delta_update
 
                 # Project to epsilon ball
                 delta.data = self._project_perturbation(delta.data, images)

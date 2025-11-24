@@ -12,7 +12,15 @@
         config.allowUnfree = true;
       };
 
-      diffjpeg = pkgs.python3Packages.buildPythonPackage {
+      python = pkgs.python3.override {
+        packageOverrides = self: super: {
+          torch = super.torch.override {
+            cudaSupport = true;
+          };
+        };
+      };
+
+      diffjpeg = python.pkgs.buildPythonPackage {
         pname = "DiffJPEG";
         version = "0.1";
 
@@ -23,22 +31,38 @@
           sha256 = "sha256-2fiifHDJFhduZIGj/Y320+DKJYjrj9umuvEf4VtlobA=";
         };
 
-        propagatedBuildInputs = with pkgs.python3Packages; [
+        propagatedBuildInputs = with python.pkgs; [
           kornia
           numpy
         ];
       };
+
+      lpips = python.pkgs.buildPythonPackage {
+        pname = "lpips";
+        version = "0.1.4";
+
+        src = pkgs.fetchFromGitHub {
+          owner = "richzhang";
+          repo = "PerceptualSimilarity";
+          rev = "082bb24f84c091ea94de2867d34c4544f68e0963";
+          sha256 = "sha256-EYpb/toYLz9w6vzIq4M40Q2DH6uHcDSB5q8PSv/7PM8=";
+        };
+      };
     in
     {
       devShells.default = pkgs.mkShell {
-        packages = with pkgs; [
-          python3
-          python3Packages.numpy
-          python3Packages.pillow
-          python3Packages.torchWithCuda
-          python3Packages.torchvision
-
-          diffjpeg
+        packages = [
+          (python.withPackages (ps: with ps; [
+            diffjpeg
+            lpips
+            matplotlib
+            numpy
+            pillow
+            pytorch-msssim
+            torch
+            torchvision
+            tqdm
+          ]))
         ];
       };
     }

@@ -15,7 +15,9 @@ import torchvision.transforms as transforms
 from PIL import Image
 import matplotlib.pyplot as plt
 
-# Import our modules
+from argparse import ArgumentParser
+
+from torchvision.utils import save_image
 from model_factory import ModelFactory
 from compression_pgd import CompressionPGD
 from compression.real_jpeg import RealJPEGCompression
@@ -54,37 +56,43 @@ def predict_image(model: torch.nn.Module, image: torch.Tensor, device: str) -> t
 
 def visualize_results(
     original: torch.Tensor,
+    compressed_orig: torch.Tensor,
     adversarial: torch.Tensor,
-    compressed: torch.Tensor,
+    compressed_adv: torch.Tensor,
     save_path: str = 'attack_visualization.png'
 ):
     """Visualize the attack results."""
-    fig, axes = plt.subplots(1, 4, figsize=(16, 4))
+    fig, axes = plt.subplots(2, 3, figsize=(16, 10))
 
     # Convert tensors to numpy for visualization
     def tensor_to_numpy(t):
         return t.squeeze(0).cpu().numpy().transpose(1, 2, 0) / 255.0
 
-    # Original image
-    axes[0].imshow(tensor_to_numpy(original))
-    axes[0].set_title('Original Image')
-    axes[0].axis('off')
+    axes[0, 0].imshow(tensor_to_numpy(original))
+    axes[0, 0].set_title('Original Image')
+    axes[0, 0].axis('off')
+
+    axes[0, 1].imshow(tensor_to_numpy(compressed_orig))
+    axes[0, 1].set_title('Original (Compressed)')
+    axes[0, 1].axis('off')
+
+    axes[0, 2].remove()
 
     # Adversarial image (pre-compression)
-    axes[1].imshow(tensor_to_numpy(adversarial))
-    axes[1].set_title('Adversarial (Pre-compression)')
-    axes[1].axis('off')
+    axes[1, 0].imshow(tensor_to_numpy(adversarial))
+    axes[1, 0].set_title('Adversarial (Pre-compression)')
+    axes[1, 0].axis('off')
 
     # Compressed adversarial
-    axes[2].imshow(tensor_to_numpy(compressed))
-    axes[2].set_title('Adversarial (Post-compression)')
-    axes[2].axis('off')
+    axes[1, 1].imshow(tensor_to_numpy(compressed_adv))
+    axes[1, 1].set_title('Adversarial (Post-compression)')
+    axes[1, 1].axis('off')
 
     # Perturbation (amplified 10x for visibility)
     perturbation = (adversarial - original).abs() * 10
-    axes[3].imshow(tensor_to_numpy(perturbation), cmap='hot')
-    axes[3].set_title('Perturbation (10x magnified)')
-    axes[3].axis('off')
+    axes[1, 2].imshow(tensor_to_numpy(perturbation), cmap='hot')
+    axes[1, 2].set_title('Perturbation (10x magnified)')
+    axes[1, 2].axis('off')
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
@@ -92,7 +100,29 @@ def visualize_results(
 
 
 def main():
-    """Main demonstration."""
+    parser = ArgumentParser()
+    parser.add_argument('-i', '--image', required=True)
+    parser.add_argument('-l', '--label', required=True, type=int)
+    parser.add_argument('-o', '--output', default='adv.png')
+    parser.add_argument('-t', '--target', type=int)
+    parser.add_argument('-e', '--epsilon', type=int, default=8)
+    parser.add_argument('-a', '--alpha', type=int, default=2)
+    parser.add_argument('-n', '--steps', type=int, default=50)
+    parser.add_argument('-d', '--norm', default='linf')
+    parser.add_argument('-q', '--quality', default='50')
+    parser.add_argument('-s', '--samples', type=int, default=1)
+    parser.add_argument('-v', '--visualization', default='vis.png')
+
+    args = parser.parse_args()
+    quality = [int(q) for q in args.quality.split('-')]
+
+    if len(quality) == 1:
+        quality_min = quality_max = quality[0]
+    elif len(quality) == 2:
+        quality_min, quality_max = quality
+    else:
+      raise ValueError('Quality argument invalid')
+
     print("="*80)
     print("Compression-Activated Adversarial Attack - Simple Example")
     print("="*80 + "\n")
@@ -114,9 +144,10 @@ def main():
     # Note: You'll need to provide your own test image
     # For this example, we'll create a random image
     print("Step 2: Loading test image...")
+
     # image = torch.rand(1, 3, 224, 224, device=device) * 255.0
-    image = load_test_image('tabbycat.jpg', size=224).to(device)
-    true_label = torch.tensor([281], device=device)  # Example: 'tabby cat'
+    image = load_test_image(args.image, size=224).to(device)
+    true_label = torch.tensor([int(args.label)], device=device)
     print("✓ Image loaded\n")
 
     # Get original prediction
@@ -127,19 +158,19 @@ def main():
     print("\nStep 3: Initializing compression-PGD attack...")
     attack = CompressionPGD(
         model=model,
-        epsilon=8.0,          # Max perturbation
-        alpha=2.0,            # Step size
-        num_steps=50,         # Number of iterations (reduced for demo)
-        norm='linf',          # L-infinity norm
-        targeted=True,       # Untargeted attack
-        jpeg_quality_min=50,  # EoT quality range
-        jpeg_quality_max=50,
-        num_jpeg_samples=1,   # EoT samples
+        epsilon=args.epsilon,
+        alpha=args.alpha,
+        num_steps=args.steps,
+        norm=args.norm,
+        targeted=args.target is not None,
+        jpeg_quality_min=quality_min,
+        jpeg_quality_max=quality_max,
+        num_jpeg_samples=args.samples,
         device=device,
         loss_weights={
-            'pre_compression': 0,
+            'pre_compression': 0.5,
             'post_compression': 1.0,
-            'lpips': .5,
+            'lpips': 0,
             'tv_norm': 0
         }
     )
@@ -149,11 +180,12 @@ def main():
     print("Step 4: Generating adversarial example...")
     print("(This may take a minute...)\n")
 
+    target_label = args.target if args.target else -1
     adv_image, info = attack.attack(
         images=image,
         labels=true_label,
         return_history=True,
-        target_labels=torch.tensor([7], device=device)
+        target_labels=torch.tensor([target_label], device=device)
     )
 
     print("✓ Attack completed!\n")
@@ -173,10 +205,15 @@ def main():
     # Post-compression with real JPEG
     print(f"\n✓ POST-COMPRESSION (real JPEG):")
     real_jpeg = RealJPEGCompression()
+    best_misclass = 50
 
     for quality in [50, 75, 95]:
         compressed = real_jpeg.compress(adv_image, quality)
         post_class, post_conf = predict_image(model, compressed, device)
+        misclassified = post_class != true_label.item()
+
+        if misclassified:
+            best_misclass = quality
 
         print(f"\n  Quality {quality}:")
         print(f"    Predicted class: {post_class}")
@@ -192,13 +229,19 @@ def main():
 
     print("\n" + "="*80)
 
+    # Output the (uncompressed) adversarial image.
+    save_image(adv_image.float() / 255.0, args.output)
+
     # 6. Visualize
     print("\nStep 5: Creating visualization...")
-    compressed_q75 = real_jpeg.compress(adv_image, 50)
+    compressed_orig = real_jpeg.compress(image, best_misclass)
+    compressed_adv = real_jpeg.compress(adv_image, best_misclass)
     visualize_results(
         original=image,
+        compressed_orig=compressed_orig,
         adversarial=adv_image,
-        compressed=compressed_q75
+        compressed_adv=compressed_adv,
+        save_path=args.visualization,
     )
 
     print("\n✓ Done!")

@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import lpips
 from pytorch_msssim import ssim, ms_ssim
-from typing import Dict, Optional
+from typing import Dict, Literal, Optional
 
 
 class CompressionActivatedLoss(nn.Module):
@@ -91,14 +91,13 @@ class CompressionActivatedLoss(nn.Module):
         logits_post = self.model(self._normalize_for_model(adv_post))
 
         # 1. Pre-compression loss (minimize to keep benign)
-        loss_pre = self._classification_loss(
-            logits_pre, true_label, target_label, maximize=False
-        )
+        loss_pre = F.cross_entropy(logits_pre, true_label)
 
         # 2. Post-compression loss (maximize to make adversarial)
-        loss_post = self._classification_loss(
-            logits_post, true_label, target_label, maximize=True
-        )
+        if self.targeted and target_label is not None:
+            loss_post = F.cross_entropy(logits_post, target_label)
+        else:
+            loss_post = -F.cross_entropy(logits_post, true_label)
 
         # 3. Perceptual similarity (LPIPS)
         loss_lpips = self._compute_lpips(adv_pre, original)
@@ -122,31 +121,6 @@ class CompressionActivatedLoss(nn.Module):
             'lpips': loss_lpips,
             'tv_norm': loss_tv
         }
-
-    def _classification_loss(
-        self,
-        logits: torch.Tensor,
-        true_label: torch.Tensor,
-        target_label: Optional[torch.Tensor],
-        maximize: bool
-    ) -> torch.Tensor:
-        """
-        Compute classification loss (cross-entropy).
-
-        Args:
-            logits: Model logits
-            true_label: True class labels
-            target_label: Target class labels (for targeted attacks)
-            maximize: If True, maximize loss (for adversarial). If False, minimize.
-        """
-        if self.targeted and target_label is not None:
-            # Targeted: minimize loss w.r.t. target class
-            loss = F.cross_entropy(logits, target_label)
-            return -loss if maximize else loss
-        else:
-            # Untargeted: maximize loss w.r.t. true class
-            loss = F.cross_entropy(logits, true_label)
-            return -loss if maximize else loss
 
     def _compute_lpips(
         self,
