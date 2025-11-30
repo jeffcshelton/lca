@@ -5,6 +5,7 @@ Usage:
     python scripts/train_attack.py --config configs/resnet50.yaml
 """
 
+import os
 import argparse
 import sys
 from pathlib import Path
@@ -13,6 +14,7 @@ import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
+from torchvision.datasets.folder import DatasetFolder, IMG_EXTENSIONS, default_loader
 import numpy as np
 from tqdm import tqdm
 import json
@@ -91,7 +93,7 @@ class CompressionAttackExperiment:
             alpha=attack_config['alpha'],
             num_steps=attack_config['num_steps'],
             norm=attack_config['norm'],
-            targeted=attack_config['targeted'],
+            targeted=attack_config['target'] is not None,
             jpeg_quality_min=attack_config['jpeg_quality_min'],
             jpeg_quality_max=attack_config['jpeg_quality_max'],
             num_jpeg_samples=attack_config['num_jpeg_samples'],
@@ -115,11 +117,29 @@ class CompressionAttackExperiment:
 
         # Load dataset
         if data_config['dataset'] == 'imagenet':
-            dataset = datasets.ImageNet(
+
+            def find_classes(directory):
+                """Find classes using folder names as class indices."""
+                classes = sorted(entry.name for entry in os.scandir(directory) if entry.is_dir())
+                class_to_idx = {cls_name: int(cls_name) for cls_name in classes}
+                return classes, class_to_idx
+
+            dataset = DatasetFolder(
                 root=data_config['data_dir'],
-                split='val',
-                transform=transform
+                loader=default_loader,
+                extensions=IMG_EXTENSIONS,
+                transform=transform,
+                is_valid_file=None
             )
+            # Override the class mapping to use folder names as labels
+            dataset.classes, dataset.class_to_idx = find_classes(data_config['data_dir'])
+            dataset.samples = datasets.folder.make_dataset(
+                data_config['data_dir'],
+                dataset.class_to_idx,
+                IMG_EXTENSIONS,
+                is_valid_file=None
+            )
+            dataset.targets = [s[1] for s in dataset.samples]
         else:
             raise ValueError(f"Unknown dataset: {data_config['dataset']}")
 
@@ -152,6 +172,7 @@ class CompressionAttackExperiment:
         all_results = []
         save_count = 0
         max_saves = self.config['evaluation']['num_examples_to_save']
+        target_labels = None
 
         # Create directories for saving examples
         if self.config['evaluation']['save_examples']:
@@ -159,22 +180,35 @@ class CompressionAttackExperiment:
             examples_dir.mkdir(exist_ok=True)
 
         # Generate adversarial examples
-        for batch_idx, (images, labels) in enumerate(tqdm(self.dataloader, desc="Batches")):
+        for images, labels in tqdm(self.dataloader, desc="Batches"):
             images = images.to(self.device)
             labels = labels.to(self.device)
+
+            if self.config['attack']['target'] is not None:
+                target_labels = torch.tensor(
+                    [self.config['attack']['target']],
+                    device=self.device,
+                ).repeat(images.size(0))
 
             # Generate adversarial examples
             adv_images, info = self.attack.attack(
                 images=images,
                 labels=labels,
-                return_history=False
+                return_history=False,
+                target_labels=target_labels,
             )
 
             # Evaluate with real JPEG
             real_jpeg_results = self._evaluate_real_jpeg(
-                adv_images, images, labels
+                adv_images, labels, prefix='true'
             )
             info.update(real_jpeg_results)
+
+            if target_labels is not None:
+                target_results = self._evaluate_real_jpeg(
+                  adv_images, target_labels, prefix='target'
+                )
+                info.update(target_results)
 
             # Save examples
             if (self.config['evaluation']['save_examples'] and
@@ -211,8 +245,8 @@ class CompressionAttackExperiment:
     def _evaluate_real_jpeg(
         self,
         adv_images: torch.Tensor,
-        clean_images: torch.Tensor,
-        labels: torch.Tensor
+        labels: torch.Tensor,
+        prefix: str,
     ) -> dict:
         """Evaluate adversarial examples with real JPEG compression."""
         results = {}
@@ -224,7 +258,7 @@ class CompressionAttackExperiment:
 
             # Compute accuracy
             accuracy = self._compute_accuracy(compressed, labels)
-            results[f'real_jpeg_q{quality}_accuracy'] = accuracy
+            results[f'{prefix}_q{quality}_accuracy'] = accuracy
 
         # results['uncompressed_accuracy'] = self._compute_accuracy(adv_images, labels)?
         return results

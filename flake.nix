@@ -53,6 +53,7 @@
       devShells.default = pkgs.mkShell {
         packages = [
           (python.withPackages (ps: with ps; [
+            datasets
             diffjpeg
             lpips
             matplotlib

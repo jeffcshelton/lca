@@ -21,52 +21,35 @@ model:
 
 attack:
   type: "compression_pgd"  # Type of attack
-  targeted: false  # true for targeted, false for untargeted
-  target_class: null  # Required if targeted=true
+  target: 281
 
   # PGD parameters
-  epsilon: 8.0  # Maximum perturbation (in [0, 255] scale)
-  alpha: 2.0  # Step size
+  epsilon: 1  # Maximum perturbation (in [0, 255] scale)
+  alpha: 2  # Step size
   num_steps: 100  # Number of optimization steps
   norm: "linf"  # linf or l2
 
   # Compression parameters
   jpeg_quality_min: 50  # Minimum JPEG quality to sample
   jpeg_quality_max: 95  # Maximum JPEG quality to sample
-  num_jpeg_samples: 20  # Number of quality values to sample per step (EoT)
+  num_jpeg_samples: 5  # Number of quality values to sample per step (EoT)
   use_ste: true  # Use straight-through estimator in Diff-JPEG
 
   # Loss function weights
   loss_weights:
-    pre_compression: 1.0  # Minimize loss pre-compression (benign)
+    pre_compression: 0.5  # Minimize loss pre-compression (benign)
     post_compression: 1.0  # Maximize loss post-compression (adversarial)
-    lpips: 0.1  # Perceptual similarity constraint
-    tv_norm: 0.01  # Total variation for smoothness
-
-  # Optimization
-  optimizer: "adam"  # adam or sgd
-  learning_rate: 0.01
-  momentum: 0.9  # For SGD
+    lpips: 0.0  # Perceptual similarity constraint
+    tv_norm: 0.0  # Total variation for smoothness
 
 evaluation:
   # Test with real JPEG compression
   real_jpeg_qualities: [50, 75, 85, 95]
 
-  # Metrics to compute
-  metrics:
-    - "attack_success_rate"
-    - "pre_compression_accuracy"
-    - "post_compression_accuracy"
-    - "lpips"
-    - "ssim"
-    - "psnr"
-    - "l2_norm"
-    - "linf_norm"
-
   # Save adversarial examples
   save_examples: true
-  num_examples_to_save: 50
+  num_examples_to_save: 20
 
 output:
-  output_dir: "./experiments"
+  output_dir: "./experiments/eps1-inf-t281"
   save_final_model: true

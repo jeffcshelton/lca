@@ -1,5 +1,7 @@
 .direnv/
 __pycache__/
+data/
+experiments/
 env/
 out/
 /adv.png
