@@ -1,8 +1,5 @@
 """
 Main script for generating compression-activated adversarial examples.
-
-Usage:
-    python scripts/train_attack.py --config configs/resnet50.yaml
 """
 
 import os

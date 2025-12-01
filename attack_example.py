@@ -5,9 +5,6 @@ This script shows the minimal code needed to:
 1. Load a pretrained model
 2. Generate compression-activated adversarial examples
 3. Evaluate their effectiveness
-
-Run:
-    python examples/simple_attack_example.py
 """
 
 import torch
