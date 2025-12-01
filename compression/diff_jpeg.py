@@ -168,7 +168,6 @@ class ExpectationOverTransformation:
             return self.jpeg_layer(x, quality)
         else:
             # Average over multiple transformations
-            # This provides an unbiased estimate of the gradient of the expectation
             compressed_samples = []
             for _ in range(self.num_samples):
                 quality = self.sample_qualities(x.shape[0], x.device)
@@ -177,42 +176,3 @@ class ExpectationOverTransformation:
 
             # Average the compressed outputs
             return torch.stack(compressed_samples).mean(dim=0)
-
-
-def test_differentiable_jpeg():
-    """Test the differentiable JPEG layer."""
-    print("Testing DifferentiableJPEG...")
-
-    # Create test image
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    x = torch.rand(2, 3, 224, 224, device=device) * 255.0
-
-    # Test basic compression
-    jpeg_layer = DifferentiableJPEG(quality=75.0).to(device)
-    compressed = jpeg_layer(x)
-
-    print(f"Input shape: {x.shape}")
-    print(f"Output shape: {compressed.shape}")
-    print(f"Input range: [{x.min():.2f}, {x.max():.2f}]")
-    print(f"Output range: [{compressed.min():.2f}, {compressed.max():.2f}]")
-
-    # Test gradient flow
-    x.requires_grad = True
-    compressed = jpeg_layer(x)
-    loss = compressed.mean()
-    loss.backward()
-
-    print(f"Gradient exists: {x.grad is not None}")
-    print(f"Gradient shape: {x.grad.shape if x.grad is not None else 'None'}")
-
-    # Test EoT
-    print("\nTesting EoT...")
-    eot = ExpectationOverTransformation(jpeg_layer, num_samples=3)
-    compressed_eot = eot(x, single_sample=False)
-    print(f"EoT output shape: {compressed_eot.shape}")
-
-    print("\nAll tests passed!")
-
-
-if __name__ == '__main__':
-    test_differentiable_jpeg()

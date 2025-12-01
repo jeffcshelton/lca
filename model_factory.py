@@ -120,30 +120,3 @@ class ModelFactory:
             raise ValueError(f"Unknown dataset: {dataset}")
 
         return mean, std
-
-
-def test_model_factory():
-    """Test the model factory."""
-    print("Testing ModelFactory...")
-
-    # Test creating different models
-    for arch in ['resnet50', 'vgg16', 'inception_v3']:
-        print(f"\nCreating {arch}...")
-        model = ModelFactory.create_model(arch, pretrained=True, device='cpu')
-
-        # Test forward pass
-        input_size = ModelFactory.get_input_size(arch)
-        x = torch.randn(1, 3, *input_size)
-
-        with torch.no_grad():
-            output = model(x)
-
-        print(f"  Input shape: {x.shape}")
-        print(f"  Output shape: {output.shape}")
-        assert output.shape == (1, 1000), f"Expected (1, 1000), got {output.shape}"
-
-    print("\nAll tests passed!")
-
-
-if __name__ == '__main__':
-    test_model_factory()

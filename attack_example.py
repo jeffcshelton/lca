@@ -141,11 +141,8 @@ def main():
     print("✓ Model loaded\n")
 
     # 2. Load test image
-    # Note: You'll need to provide your own test image
-    # For this example, we'll create a random image
     print("Step 2: Loading test image...")
 
-    # image = torch.rand(1, 3, 224, 224, device=device) * 255.0
     image = load_test_image(args.image, size=224).to(device)
     true_label = torch.tensor([int(args.label)], device=device)
     print("✓ Image loaded\n")

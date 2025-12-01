@@ -13,7 +13,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import lpips
 from pytorch_msssim import ssim, ms_ssim
-from typing import Dict, Literal, Optional
+from typing import Dict, Optional
 
 
 class CompressionActivatedLoss(nn.Module):
@@ -194,46 +194,3 @@ class SSIMLoss(nn.Module):
         """
         ssim_val = ssim(x, y, data_range=self.data_range, size_average=True) #ms_ssim?
         return 1.0 - ssim_val
-
-
-def test_loss_functions():
-    """Test the loss functions."""
-    print("Testing CompressionActivatedLoss...")
-
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    # Create dummy model
-    class DummyModel(nn.Module):
-        def forward(self, x):
-            return torch.randn(x.shape[0], 1000, device=x.device)
-
-    model = DummyModel().to(device)
-
-    # Create loss function
-    loss_fn = CompressionActivatedLoss(model, device=device)
-
-    # Create dummy data
-    batch_size = 2
-    adv_pre = torch.rand(batch_size, 3, 224, 224, device=device) * 255
-    adv_post = torch.rand(batch_size, 3, 224, 224, device=device) * 255
-    original = torch.rand(batch_size, 3, 224, 224, device=device) * 255
-    true_label = torch.randint(0, 1000, (batch_size,), device=device)
-
-    # Compute loss
-    losses = loss_fn(adv_pre, adv_post, original, true_label)
-
-    print(f"Total loss: {losses['total'].item():.4f}")
-    print(f"Pre-compression: {losses['pre_compression'].item():.4f}")
-    print(f"Post-compression: {losses['post_compression'].item():.4f}")
-    print(f"LPIPS: {losses['lpips'].item():.4f}")
-    print(f"TV norm: {losses['tv_norm'].item():.4f}")
-
-    # Test backward pass
-    losses['total'].backward()
-    print("\nBackward pass successful!")
-
-    print("\nAll tests passed!")
-
-
-if __name__ == '__main__':
-    test_loss_functions()

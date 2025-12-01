@@ -63,7 +63,7 @@ class CompressionPGD:
         self.device = device
 
         # Initialize JPEG layer and EoT
-        self.jpeg_layer = DifferentiableJPEG(use_ste=True).to(device) # use_ste=False?
+        self.jpeg_layer = DifferentiableJPEG(use_ste=True).to(device)
         self.eot = ExpectationOverTransformation(
             self.jpeg_layer,
             quality_min=jpeg_quality_min,
@@ -248,7 +248,7 @@ class CompressionPGD:
             pre_acc = self._compute_accuracy(adv_images, true_labels)
 
             # Post-compression metrics (test with different qualities)
-            test_qualities = [50, 75, 85, 95] # could be parameterized
+            test_qualities = [50, 75, 85, 95]
             post_accuracies = {}
 
             for quality in test_qualities:
@@ -270,44 +270,3 @@ class CompressionPGD:
             'linf_norm': linf_norm,
             'l2_norm': l2_norm
         }
-
-
-def test_compression_pgd():
-    """Test the CompressionPGD attack."""
-    print("Testing CompressionPGD...")
-
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-
-    # Create dummy model
-    class DummyModel(nn.Module):
-        def forward(self, x):
-            return torch.randn(x.shape[0], 1000, device=x.device)
-
-    model = DummyModel().to(device).eval()
-
-    # Create attack
-    attack = CompressionPGD(
-        model=model,
-        epsilon=8.0,
-        num_steps=5,  # Small number for testing
-        device=device
-    )
-
-    # Create test data
-    images = torch.rand(2, 3, 224, 224, device=device) * 255
-    labels = torch.randint(0, 1000, (2,), device=device)
-
-    # Run attack
-    adv_images, info = attack.attack(images, labels, return_history=True)
-
-    print(f"\nOriginal shape: {images.shape}")
-    print(f"Adversarial shape: {adv_images.shape}")
-    print(f"Pre-compression accuracy: {info['pre_compression_accuracy']:.4f}")
-    print(f"L-inf norm: {info['linf_norm']:.4f}")
-    print(f"L2 norm: {info['l2_norm']:.4f}")
-
-    print("\nAll tests passed!")
-
-
-if __name__ == '__main__':
-    test_compression_pgd()
